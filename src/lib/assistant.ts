@@ -7,7 +7,8 @@ import { APP_TIMEZONE, todayISO, weekdayName } from "./dates";
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const CURRENCY = process.env.APP_CURRENCY || "INR";
 
-const client = new Anthropic();
+// Accept either name for the key; ANTHROPIC_KEY is also common.
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY });
 
 const ParsedExpense = z.object({
   amount: z.number().describe("Positive amount in the user's currency. Convert words like '2k' to 2000."),

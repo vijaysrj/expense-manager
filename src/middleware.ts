@@ -13,6 +13,8 @@ export async function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
+  // The home page is public: it shows the landing page until the visitor signs in.
+  if (req.nextUrl.pathname === "/") return NextResponse.next();
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";

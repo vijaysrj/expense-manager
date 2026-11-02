@@ -119,7 +119,7 @@ export default function Chat() {
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = "/";
   }
 
   const isEmpty = loaded && !loadError && messages.length === 0;

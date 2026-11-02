@@ -13,12 +13,17 @@ and without them.
 
 Works on phones (installable to the home screen) and desktop browsers.
 
-## Roadmap
+## What you can ask
 
-1. **Chat logging** (this version): log expenses in chat, edit/undo cards, passcode login.
-2. Expense history and corrections through chat ("change yesterday's tea to 30").
-3. Reports through chat: weekly/monthly/yearly averages with and without one-offs, top categories.
-4. Smart advice: where spending is rising, what to cut, cheaper alternatives.
+| You type | What happens |
+| --- | --- |
+| `25 rupees for tea today`, `auto 80, lunch 150` | Logs the expenses with a category and date |
+| `change yesterday's tea to 30`, `that was transport`, `delete the last one`, `school fees isn't a one-off` | Fixes existing entries |
+| `this month so far`, `weekly average this month`, `monthly average this year`, `top category this year` | Report card: averages with and without one-offs, trend chart, category breakdown |
+| `monthly average without school fees`, `average excluding education` | Same report, leaving those items or categories out |
+| `where can I cut back?`, `cheaper options for groceries?` | Smart advice based on your actual spending |
+
+The **History** page lists every expense by month with totals, and any entry can be edited there.
 
 ## Deploy on Vercel
 
@@ -30,7 +35,7 @@ Works on phones (installable to the home screen) and desktop browsers.
    - `AUTH_SECRET`: a long random string (`openssl rand -hex 32`)
 4. Redeploy. Tables are created automatically on first use.
 
-See `.env.example` for optional settings (model, timezone, currency).
+See `.env.example` for optional settings (model, advice model, city for local tips, timezone, currency).
 
 ## Run locally
 
@@ -43,7 +48,9 @@ npm run dev
 ## How it works
 
 - `src/lib/assistant.ts`: sends the message (plus a few recent turns for context) to Claude with a
-  structured-output schema, and gets back a list of expenses and a short reply.
+  structured-output schema. It returns new expenses, edits, deletions, and a report or advice request. The app computes report numbers itself, so the AI never does arithmetic.
+- `src/lib/reports.ts`: report maths (averages with and without one-offs, exclusions, trend buckets). Checked by `npm run check`.
+- `src/lib/advice.ts`: builds the spending summary that the advice prompt sees (aggregates only).
 - `src/lib/db.ts`: Postgres access through the Neon serverless driver. Tables: `expenses`, `chat_messages`.
 - `src/app/api/*`: chat, history, expense edit/delete, login/logout routes.
 - `src/middleware.ts`: everything except the login page requires the signed session cookie.

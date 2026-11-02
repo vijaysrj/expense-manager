@@ -1,15 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import AdviceCard from "./AdviceCard";
 import ExpenseCard from "./ExpenseCard";
+import ReportCard from "./ReportCard";
 import { formatMoney } from "@/lib/format";
 import type { ChatMessage, Expense } from "@/lib/types";
 
-const SUGGESTIONS = [
+const STARTER_SUGGESTIONS = [
   "25 rupees for tea today",
   "Auto 80 and lunch 150",
   "Paid 1200 electricity bill yesterday",
   "Groceries 640 on Sunday",
+];
+
+const REPORT_SUGGESTIONS = [
+  "This month so far",
+  "Weekly average this month",
+  "Monthly average this year",
+  "Top category this year",
+  "Monthly average without school fees",
+  "Where can I cut back?",
 ];
 
 let tempId = -1;
@@ -55,6 +67,8 @@ export default function Chat() {
       role: "user",
       content: message,
       expenses: [],
+      report: null,
+      advice: null,
       createdAt: new Date().toISOString(),
     };
     setMessages((m) => [...m, pending]);
@@ -81,6 +95,8 @@ export default function Chat() {
           role: "assistant",
           content: e instanceof Error ? `⚠️ ${e.message}` : "⚠️ Something went wrong",
           expenses: [],
+          report: null,
+          advice: null,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -107,6 +123,8 @@ export default function Chat() {
   }
 
   const isEmpty = loaded && !loadError && messages.length === 0;
+  const hasExpenses = messages.some((m) => m.expenses.length > 0) || messages.length > 6;
+  const suggestions = hasExpenses ? REPORT_SUGGESTIONS : STARTER_SUGGESTIONS;
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -119,9 +137,17 @@ export default function Chat() {
               <p className="text-xs leading-tight text-zinc-500">Just tell me what you spent</p>
             </div>
           </div>
-          <button onClick={logout} className="rounded-full px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-            Sign out
-          </button>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/history"
+              className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+            >
+              History
+            </Link>
+            <button onClick={logout} className="rounded-full px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -137,7 +163,10 @@ export default function Chat() {
                 💬
               </div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Log an expense</h2>
-              <p className="mt-1 text-sm text-zinc-500">Type it the way you&apos;d say it. Try one of these:</p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Type it the way you&apos;d say it. Later, ask for reports like &quot;monthly average&quot; or tips on where to
+                cut back.
+              </p>
             </div>
           )}
 
@@ -153,6 +182,16 @@ export default function Chat() {
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-white px-4 py-2 text-zinc-800 shadow-sm dark:bg-zinc-900 dark:text-zinc-200">
                   {msg.content}
                 </div>
+                {msg.report && (
+                  <div className="w-full max-w-md">
+                    <ReportCard report={msg.report} />
+                  </div>
+                )}
+                {msg.advice && (
+                  <div className="w-full max-w-md">
+                    <AdviceCard advice={msg.advice} />
+                  </div>
+                )}
                 {msg.expenses.length > 0 && (
                   <div className="flex w-full max-w-md flex-col gap-2">
                     {msg.expenses.map((e) => (
@@ -182,9 +221,9 @@ export default function Chat() {
 
       <footer className="border-t border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mx-auto max-w-2xl px-3 pt-2 pb-3">
-          {(isEmpty || messages.length < 3) && loaded && (
-            <div className="-mx-3 mb-2 flex gap-2 overflow-x-auto px-3 pb-1">
-              {SUGGESTIONS.map((s) => (
+          {loaded && (
+            <div className="-mx-3 mb-2 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]">
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => send(s)}

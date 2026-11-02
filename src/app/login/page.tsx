@@ -6,6 +6,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -15,7 +16,7 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, remember }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -46,6 +47,15 @@ export default function LoginPage() {
           className="mt-5 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base text-zinc-900 outline-none focus:border-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           placeholder="Passcode"
         />
+        <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="h-4 w-4 accent-emerald-600"
+          />
+          Keep me signed in
+        </label>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         <button
           type="submit"

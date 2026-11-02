@@ -3,7 +3,7 @@ import { neon, neonConfig } from "@neondatabase/serverless";
 // Local development hook: point the driver at a local SQL-over-HTTP proxy.
 if (process.env.NEON_FETCH_ENDPOINT) neonConfig.fetchEndpoint = process.env.NEON_FETCH_ENDPOINT;
 import { isCategory, type Category } from "./categories";
-import type { ChatMessage, Expense } from "./types";
+import type { Advice, ChatMessage, Expense, Report } from "./types";
 
 function connectionString(): string {
   const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -50,6 +50,8 @@ export function ensureSchema(): Promise<void> {
           expense_ids INTEGER[] NOT NULL DEFAULT '{}',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`;
+      await q`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS report JSONB`;
+      await q`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS advice JSONB`;
     })().catch((err) => {
       schemaReady = null;
       throw err;
@@ -130,21 +132,49 @@ export async function deleteExpense(id: number): Promise<boolean> {
 export async function addChatMessage(
   role: "user" | "assistant",
   content: string,
-  expenseIds: number[] = [],
+  extras: { expenseIds?: number[]; report?: Report | null; advice?: Advice | null } = {},
 ): Promise<{ id: number; createdAt: string }> {
   await ensureSchema();
   const rows = (await sql()`
-    INSERT INTO chat_messages (role, content, expense_ids)
-    VALUES (${role}, ${content}, ${expenseIds}::integer[])
+    INSERT INTO chat_messages (role, content, expense_ids, report, advice)
+    VALUES (${role}, ${content}, ${extras.expenseIds ?? []}::integer[],
+            ${extras.report ? JSON.stringify(extras.report) : null}::jsonb,
+            ${extras.advice ? JSON.stringify(extras.advice) : null}::jsonb)
     RETURNING id, created_at`) as Row[];
   return { id: Number(rows[0].id), createdAt: new Date(String(rows[0].created_at)).toISOString() };
+}
+
+
+/** Expenses with spent_on in [start, end], oldest first. */
+export async function listExpenses(start: string, end: string): Promise<Expense[]> {
+  await ensureSchema();
+  const rows = (await sql()`
+    SELECT id, amount, currency, category, description, to_char(spent_on, 'YYYY-MM-DD') AS spent_on, is_one_off
+    FROM expenses WHERE spent_on BETWEEN ${start}::date AND ${end}::date
+    ORDER BY spent_on ASC, id ASC`) as Row[];
+  return rows.map(toExpense);
+}
+
+/** The most recently logged expenses, newest first. */
+export async function recentExpenses(limit = 40): Promise<Expense[]> {
+  await ensureSchema();
+  const rows = (await sql()`
+    SELECT id, amount, currency, category, description, to_char(spent_on, 'YYYY-MM-DD') AS spent_on, is_one_off
+    FROM expenses ORDER BY id DESC LIMIT ${limit}`) as Row[];
+  return rows.map(toExpense);
+}
+
+export async function firstExpenseDate(): Promise<string | null> {
+  await ensureSchema();
+  const rows = (await sql()`SELECT to_char(MIN(spent_on), 'YYYY-MM-DD') AS d FROM expenses`) as Row[];
+  return rows[0]?.d ? String(rows[0].d) : null;
 }
 
 /** Most recent chat messages (oldest first), with their expenses as they are now. */
 export async function recentChat(limit = 60): Promise<ChatMessage[]> {
   await ensureSchema();
   const msgs = (await sql()`
-    SELECT id, role, content, expense_ids, created_at FROM (
+    SELECT id, role, content, expense_ids, report, advice, created_at FROM (
       SELECT * FROM chat_messages ORDER BY id DESC LIMIT ${limit}
     ) t ORDER BY id ASC`) as Row[];
   const ids = Array.from(new Set(msgs.flatMap((m) => (m.expense_ids as number[]) ?? [])));
@@ -163,6 +193,20 @@ export async function recentChat(limit = 60): Promise<ChatMessage[]> {
     expenses: ((m.expense_ids as number[]) ?? [])
       .map((id) => byId.get(Number(id)))
       .filter((e): e is Expense => Boolean(e)),
+    report: parseJson<Report>(m.report),
+    advice: parseJson<Advice>(m.advice),
     createdAt: new Date(String(m.created_at)).toISOString(),
   }));
+}
+
+function parseJson<T>(v: unknown): T | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return v as T;
 }

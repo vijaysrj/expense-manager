@@ -131,7 +131,8 @@ export default function Chat() {
       <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">₹</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.svg" alt="" className="h-8 w-8 rounded-lg" />
             <div>
               <h1 className="text-base font-semibold leading-tight text-zinc-900 dark:text-zinc-100">Expenses</h1>
               <p className="text-xs leading-tight text-zinc-500">Just tell me what you spent</p>

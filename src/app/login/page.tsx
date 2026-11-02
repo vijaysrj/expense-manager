@@ -35,7 +35,8 @@ export default function LoginPage() {
         onSubmit={submit}
         className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
       >
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-xl text-white">₹</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.svg" alt="" className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-sm" />
         <h1 className="text-center text-xl font-semibold text-zinc-900 dark:text-zinc-100">Expenses</h1>
         <p className="mt-1 text-center text-sm text-zinc-500">Enter your passcode to continue</p>
         <input

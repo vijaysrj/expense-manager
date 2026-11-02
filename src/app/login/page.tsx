@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -65,6 +66,9 @@ export default function LoginPage() {
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
+        <Link href="/" className="mt-4 block text-center text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+          ← What is this app?
+        </Link>
       </form>
     </div>
   );

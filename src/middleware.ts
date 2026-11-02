@@ -21,5 +21,5 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   // Everything except the login page/API, Next internals and static files.
-  matcher: ["/((?!login|api/login|_next/|favicon.ico|icon.svg|manifest.webmanifest).*)"],
+  matcher: ["/((?!login|api/login|_next/|favicon.ico|icon|apple-icon|manifest.webmanifest).*)"],
 };

@@ -6,6 +6,7 @@ import AdviceCard from "./AdviceCard";
 import ExpenseCard from "./ExpenseCard";
 import ReportCard from "./ReportCard";
 import { formatMoney } from "@/lib/format";
+import { shrinkPhoto } from "@/lib/image";
 import type { ChatMessage, Expense } from "@/lib/types";
 
 const STARTER_SUGGESTIONS = [
@@ -26,6 +27,11 @@ const REPORT_SUGGESTIONS = [
 
 let tempId = -1;
 
+/** With the photo on screen, the "📷 Bill photo" label the server stores is redundant. */
+function userText(msg: ChatMessage): string {
+  return msg.imageUrl ? msg.content.replace(/^📷 Bill photo:? ?/u, "") : msg.content;
+}
+
 export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -34,6 +40,10 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [photo, setPhoto] = useState<string | null>(null); // shrunk JPEG data URL
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const scrollToBottom = useCallback((smooth = true) => {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" }));
@@ -57,11 +67,28 @@ export default function Chat() {
       });
   }, [scrollToBottom]);
 
-  async function send(text: string) {
+  async function pickPhoto(file: File | undefined) {
+    if (!file) return;
+    setPhotoError(null);
+    setPhotoBusy(true);
+    try {
+      setPhoto(await shrinkPhoto(file));
+      inputRef.current?.focus();
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "Couldn't read that photo.");
+    } finally {
+      setPhotoBusy(false);
+      if (fileRef.current) fileRef.current.value = ""; // allow picking the same file again
+    }
+  }
+
+  async function send(text: string, withPhoto: string | null = null) {
     const message = text.trim();
-    if (!message || sending) return;
+    if ((!message && !withPhoto) || sending) return;
     setSending(true);
     setInput("");
+    setPhoto(null);
+    setPhotoError(null);
     const pending: ChatMessage = {
       id: tempId--,
       role: "user",
@@ -70,6 +97,7 @@ export default function Chat() {
       report: null,
       advice: null,
       createdAt: new Date().toISOString(),
+      imageUrl: withPhoto ?? undefined,
     };
     setMessages((m) => [...m, pending]);
     scrollToBottom();
@@ -78,15 +106,17 @@ export default function Chat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(withPhoto ? { message, image: withPhoto } : { message }),
       });
       if (res.status === 401) {
         window.location.href = "/login";
         return;
       }
+      if (res.status === 413) throw new Error("That photo is too large. Please try again with a smaller one.");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
-      setMessages((m) => [...m.filter((x) => x.id !== pending.id), data.user, data.assistant]);
+      const user: ChatMessage = withPhoto ? { ...data.user, imageUrl: withPhoto } : data.user;
+      setMessages((m) => [...m.filter((x) => x.id !== pending.id), user, data.assistant]);
     } catch (e) {
       setMessages((m) => [
         ...m,
@@ -165,7 +195,7 @@ export default function Chat() {
               </div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Log an expense</h2>
               <p className="mt-1 text-sm text-zinc-500">
-                Type it the way you&apos;d say it. Later, ask for reports like &quot;monthly average&quot; or tips on where to
+                Type it the way you&apos;d say it, or tap 📷 to snap a bill. Later, ask for reports like &quot;monthly average&quot; or tips on where to
                 cut back.
               </p>
             </div>
@@ -173,10 +203,20 @@ export default function Chat() {
 
           {messages.map((msg) =>
             msg.role === "user" ? (
-              <div key={msg.id} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-emerald-600 px-4 py-2 text-white">
-                  {msg.content}
-                </div>
+              <div key={msg.id} className="flex flex-col items-end gap-1">
+                {msg.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={msg.imageUrl}
+                    alt="Bill photo"
+                    className="max-h-64 max-w-[70%] rounded-2xl rounded-br-md border border-zinc-200 object-contain dark:border-zinc-700"
+                  />
+                )}
+                {userText(msg) && (
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-emerald-600 px-4 py-2 text-white">
+                    {userText(msg)}
+                  </div>
+                )}
               </div>
             ) : (
               <div key={msg.id} className="flex flex-col items-start gap-2">
@@ -236,13 +276,61 @@ export default function Chat() {
               ))}
             </div>
           )}
+          {(photo || photoBusy || photoError) && (
+            <div className="mb-2 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800">
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo} alt="Bill to send" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-zinc-200 text-2xl dark:bg-zinc-700">📷</div>
+              )}
+              <p className="flex-1 text-sm text-zinc-600 dark:text-zinc-300">
+                {photoBusy
+                  ? "Preparing photo…"
+                  : photoError
+                    ? <span className="text-red-600 dark:text-red-400">{photoError}</span>
+                    : "Bill ready. Add a note if you like (e.g. \"split with Ravi\" or \"this was yesterday\"), then send."}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhoto(null);
+                  setPhotoError(null);
+                }}
+                aria-label="Remove photo"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => pickPhoto(e.target.files?.[0])}
+          />
           <form
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              send(input);
+              send(input, photo);
             }}
           >
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={sending || photoBusy}
+              aria-label="Add a bill photo"
+              title="Snap or upload a bill"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+                <circle cx="12" cy="13.5" r="3.5" />
+              </svg>
+            </button>
             <textarea
               ref={inputRef}
               rows={1}
@@ -251,15 +339,15 @@ export default function Chat() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  send(input);
+                  send(input, photo);
                 }
               }}
-              placeholder="e.g. 25 rupees for tea today"
+              placeholder={photo ? "Add a note (optional)" : "e.g. 25 rupees for tea today"}
               className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-base text-zinc-900 outline-none focus:border-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
             <button
               type="submit"
-              disabled={sending || !input.trim()}
+              disabled={sending || photoBusy || (!input.trim() && !photo)}
               aria-label="Send"
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700"
             >

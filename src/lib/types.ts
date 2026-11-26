@@ -79,4 +79,6 @@ export interface ChatMessage {
   report: Report | null;
   advice: Advice | null;
   createdAt: string;
+  /** Client-only: the bill photo sent with this message during this visit (not stored). */
+  imageUrl?: string;
 }

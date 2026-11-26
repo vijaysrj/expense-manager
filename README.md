@@ -18,6 +18,7 @@ Works on phones (installable to the home screen) and desktop browsers.
 | You type | What happens |
 | --- | --- |
 | `25 rupees for tea today`, `auto 80, lunch 150` | Logs the expenses with a category and date |
+| 📷 a photo of a bill or receipt (camera or gallery), with an optional note | Reads the total, date, shop and category from the bill and logs it |
 | `change yesterday's tea to 30`, `that was transport`, `delete the last one`, `school fees isn't a one-off` | Fixes existing entries |
 | `this month so far`, `weekly average this month`, `monthly average this year`, `top category this year` | Report card: averages with and without one-offs, trend chart, category breakdown |
 | `monthly average without school fees`, `average excluding education` | Same report, leaving those items or categories out |

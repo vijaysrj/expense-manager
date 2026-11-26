@@ -86,6 +86,15 @@ Reports ("monthly average", "how much did I spend this week", "top category this
 
 Advice ("where can I cut", "how can I save", "any cheaper options for groceries?"): fill advice. The app analyses the data and writes the tips separately.
 
+Bill or receipt photos (the message includes an image):
+- Read the bill and record it as one expense in new_expenses, using the final amount actually paid (grand total after taxes, tips and discounts), not a subtotal or a single line item. Only split it into several expenses if the user's note asks for that.
+- description: the merchant or shop name plus what was bought, e.g. "Swiggy - dinner", "DMart - groceries", "Apollo Pharmacy - medicines". Keep it short.
+- date: the date printed on the bill. If none is readable, use the date the user mentions, otherwise today. Bills use day-first dates (DD/MM/YY) in India. Never use a future date.
+- category: pick from the merchant and items (restaurant or café = "Food & Drinks", supermarket = "Groceries", pharmacy = "Health", petrol pump = "Fuel", electricity or phone bill = "Bills & Utilities").
+- If the user's note says something different from the bill (another amount, date or category), follow the note.
+- If the image is not a bill, or the total can't be read, record nothing and say what you couldn't read.
+- The reply names the merchant and mentions they can tap the card to fix anything, e.g. "Logged your Swiggy bill. Tap the card if anything looks off."
+
 A single message can do several of these at once. Earlier turns are context only; never re-record expenses from earlier turns.
 
 The reply confirms what happened in a few words, for example "Logged ₹25 for tea today." or "Here's your report for this month." Don't repeat amounts the app shows on its cards and don't invent numbers. Use the ₹ symbol for INR.`;
@@ -106,18 +115,33 @@ function expenseLine(e: Expense): string {
   return `id ${e.id} | ${e.spentOn} | ${e.description} | ${e.category} | ${e.amount}${e.isOneOff ? " | one-off" : ""}`;
 }
 
+export interface BillImage {
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  /** Base64 data without the data: prefix. */
+  data: string;
+}
+
 export async function interpretMessage(
   message: string,
   history: HistoryTurn[],
   recent: Expense[],
+  image?: BillImage,
 ): Promise<InterpretResult> {
   const today = todayISO();
   const recentBlock = recent.length ? recent.map(expenseLine).join("\n") : "(none yet)";
+  const text = `Current date: ${today} (${weekdayName(today)}), timezone ${APP_TIMEZONE}.\n\nRecent expenses (newest first):\n${recentBlock}\n\n${
+    image ? `The user sent a photo of a bill.${message ? ` Their note: ${message}` : " No note."}` : `User message: ${message}`
+  }`;
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...history.map((t) => ({ role: t.role, content: t.content })),
     {
       role: "user",
-      content: `Current date: ${today} (${weekdayName(today)}), timezone ${APP_TIMEZONE}.\n\nRecent expenses (newest first):\n${recentBlock}\n\nUser message: ${message}`,
+      content: image
+        ? [
+            { type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } },
+            { type: "text", text },
+          ]
+        : text,
     },
   ];
 

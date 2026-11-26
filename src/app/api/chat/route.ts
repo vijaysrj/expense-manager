@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAdviceSummary, previousPeriod } from "@/lib/advice";
-import { generateAdvice, interpretMessage, type HistoryTurn, type InterpretResult } from "@/lib/assistant";
+import { generateAdvice, interpretMessage, type BillImage, type HistoryTurn, type InterpretResult } from "@/lib/assistant";
 import {
   addChatMessage,
   deleteExpense,
@@ -119,11 +119,31 @@ async function buildAdvice(req: NonNullable<InterpretResult["advice"]>, today: s
   };
 }
 
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+// Vercel caps request bodies at 4.5 MB; the client shrinks photos well below this.
+const MAX_IMAGE_CHARS = 4_000_000;
+const BILL_PHOTO_LABEL = "📷 Bill photo";
+
+/** Accepts a data URL like "data:image/jpeg;base64,...". */
+function parseImage(value: unknown): BillImage | "invalid" | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || value.length > MAX_IMAGE_CHARS) return "invalid";
+  const m = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!m || !(IMAGE_TYPES as readonly string[]).includes(m[1])) return "invalid";
+  return { mediaType: m[1] as BillImage["mediaType"], data: m[2] };
+}
+
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { message?: unknown };
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
-  if (message.length > 2000) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
+  const body = (await req.json().catch(() => ({}))) as { message?: unknown; image?: unknown };
+  const note = typeof body.message === "string" ? body.message.trim() : "";
+  const image = parseImage(body.image);
+  if (image === "invalid") {
+    return NextResponse.json({ error: "That photo couldn't be read. Please try a JPEG or PNG under 3 MB." }, { status: 400 });
+  }
+  if (!note && !image) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
+  if (note.length > 2000) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
+  // What the chat history shows for this turn (the photo itself isn't stored).
+  const message = image ? (note ? `${BILL_PHOTO_LABEL}: ${note}` : BILL_PHOTO_LABEL) : note;
 
   const [chat, recent, firstTracked] = await Promise.all([recentChat(10), recentExpenses(40), firstExpenseDate()]);
   const history = toHistory(chat);
@@ -139,7 +159,7 @@ export async function POST(req: Request) {
 
   let result: InterpretResult;
   try {
-    result = await interpretMessage(message, history, recent);
+    result = await interpretMessage(image ? note : message, history, recent, image);
   } catch (err) {
     console.error("interpret error", err);
     return fail("Sorry, I couldn't reach the AI just now. Please try again in a moment.");
